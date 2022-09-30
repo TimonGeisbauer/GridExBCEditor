@@ -1,0 +1,34 @@
+use ::GridExBCEditor.bbj::GridExBCEditor
+use ::TestBCs/ChileCustomerTableBC.bbj::ChileCustomerTableBC
+use ::TestBCs/SuppliersBC.bbj::SuppliersBC
+
+use ::bbwindowutils.bbj::BBWindowUtils
+
+use com.basis.endpoints.DevicesBC
+
+use java.sql.DriverManager
+
+sysgui! = BBjAPI().openSysGui("X0")
+wnd! = sysgui!.addWindow(0,0,800,600,"GridExBCEditor")
+
+wnd!.setCallback(BBjAPI.ON_CLOSE,"byebye")
+wnd!.setCallback(BBjAPI.ON_RESIZE,"resize")
+
+declare GridExBCEditor editor!
+
+BBWindowUtils.centerWindow(wnd!)
+rem editor! = new GridExBCEditor(wnd!,null())
+editor! = new GridExBCEditor(wnd!,new ChileCustomerTableBC())
+rem editor! = new GridExBCEditor(wnd!, new SuppliersBC())
+rem editor! = new GridExBCEditor(wnd!,new DevicesBC(DriverManager.getConnection("jdbc:mysql://localhost:3306/Brevis2.0", "root", "admin123")))
+process_events
+
+resize:
+    ev! = BBjAPI().getLastEvent()
+    h = ev!.getHeight()
+    w = ev!.getWidth()
+    editor!.getgridex().setSize(w,h)
+return
+
+byebye:
+    release

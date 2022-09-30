@@ -1,0 +1,438 @@
+use java.util.HashMap
+
+use com.basiscomponents.bc.SqlTableBC
+use com.basiscomponents.db.DataRow
+use com.basiscomponents.db.ResultSet
+
+
+class public SuppliersBC extends SqlTableBC 
+
+    field private BBjString defaultQuery!
+
+    field private BBjString tpl! = "NR:C(9*),NAM1:C(30*),NAM2:C(30*),STR:C(30*),PLZ:C(8*),ORT:C(30*),GR:C(2*),SACHB:C(50*),BLZ:C(10*),KTO:C(15*),BANK:C(30*),MCO:C(15*),TEL:C(20*),FAX:C(20*),KUNR:C(15*),DULI:C(3*),INF:C(40*),LIAB:C(2*),NAM3:C(30*),DNEU:C(20*),DAE:C(20*),F22:C(1*),WCO:C(3*),LAND:C(2*),F24:C(1*),F25:C(1*),ZBD:C(2*),VAT:C(15*),VST:C(1*),EMAIL:C(60*),ILN:C(13*),BEST:C(1*),BESTIV:C(3*),VERSAND:C(30*),IBAN:C(35*),BIC:C(15*),F37:C(1*),F38:C(1*),F39:C(1*),MSP:C(1*),MINBE:C(12*),MIME:C(10*),MIABP:C(10*),VSPAL:C(10*),MINEK:C(10*),VSFREI:C(10*),STRECKE:C(1*),VSTRECKE:C(10*),MINGEW:C(10*),FREIGEW:C(10*),SELBST:C(1*),ADRSELB:C(20*),VTX1:C(30*),VTX2:C(30*),VTX3:C(30*),F56:C(10*),TEILI:C(1*),PRODMAN:C(16*),F59:C(1*),FREI[10]:C(5*)"
+
+    method public SuppliersBC()
+        #super!(stbl("JDBCCONNECTION",err=*next))
+        #init()
+    methodend
+        
+    method private void init()
+        declare BBjString query!
+
+        query! = ""
+        query! = query! + "SELECT * "
+        query! = query! + "FROM "
+        query! = query! + "    LIEF_STAMM"
+        #defaultQuery! = query!
+
+        #super!.setRetrieveSql(query!)
+        #super!.setTable("LIEF_STAMM")
+        #initScopes()
+    methodend
+
+    method private void initScopes()
+        declare HashMap scopes!
+        declare BBjVector scope!
+
+        scopes! = new HashMap()
+        scopes!.put("D",#super!.getAttributesRecord().getFieldNames())
+
+        scope! = new BBjVector()
+        scope!.add("NR")
+        scope!.add("NAM1")
+        scope!.add("NAM2")
+        scope!.add("STR")
+        scope!.add("PLZ")
+        scope!.add("ORT")
+        scope!.add("TEL")
+        scope!.add("FAX")
+        scope!.add("EMAIL")  
+        scope!.add("GR")
+        scope!.add("SACHB")
+        scope!.add("BANK")
+        scope!.add("F37")
+        scope!.add("IBAN")
+        scope!.add("BIC")
+        scope!.add("MCO")
+        scope!.add("KUNR")
+        scope!.add("DULI")
+        scope!.add("INF")
+        scope!.add("VAT")
+        scope!.add("DNEU")
+        scope!.add("DAE")
+        scope!.add("F24")
+        scope!.add("F25")
+        scope!.add("ZBD")
+        scope!.add("LIAB")
+        scope!.add("ILN")
+        scope!.add("MINBE")
+        scope!.add("BESTIV")
+        scope!.add("VERSAND")
+        scope!.add("MIME")   
+        scope!.add("F22")
+        scope!.add("VST")
+        scope!.add("WCO")
+        scope!.add("LAND")
+        scope!.add("BEST")
+        scope!.add("MSP")
+        scope!.add("TEILI")
+        scope!.add("MIABP")
+        scope!.add("VSPAL")
+        scope!.add("MINEK")
+        scope!.add("VSFREI")
+        scope!.add("STRECKE")
+        scope!.add("SELBST")
+        scope!.add("VSTRECKE")
+        scope!.add("MINGEW")
+        scope!.add("FREIGEW")
+        scope!.add("ADRSELB")
+        scope!.add("VTX1")
+        scope!.add("VTX2")
+        scope!.add("VTX3")
+        scope!.add("PRODMAN")
+        scopes!.put("K",scope!)
+        
+        #super!.setScopeDef(scopes!)
+        #super!.setScope("D")
+    methodend
+
+    method public ResultSet validateWrite(DataRow dr!)
+        declare ResultSet rs!
+        declare DataRow row!
+
+        rs! = new ResultSet()
+        row! = new DataRow()
+    
+        if dr! = null() OR !dr!.contains("NR") then
+            row!.setFieldValue("FIELD_NAME", "NR")
+            row!.setFieldValue("TYPE", "ERROR")
+            row!.setFieldValue("MESSAGE","Missing field NR")
+            rs!.add(row!)
+        
+            methodret rs!
+        endif
+
+        if dr!.getFieldAsString("NR").trim().length() > 9 then
+            row!.setFieldValue("FIELD_NAME", "NR")
+            row!.setFieldValue("TYPE", "ERROR")
+            row!.setFieldValue("MESSAGE","NR length doesn't match")
+            rs!.add(row!)
+        endif
+
+        if dr!.contains("NAM1") and dr!.getFieldAsString("NAM1").trim().length() > 40 then
+            row!.setFieldValue("FIELD_NAME", "NAM1")
+            row!.setFieldValue("TYPE", "ERROR")
+            row!.setFieldValue("MESSAGE","NAME1 length doesn't match")
+            rs!.add(row!)
+        endif
+
+        if dr!.contains("NAM2") and dr!.getFieldAsString("NAM2").trim().length() > 40 then
+            row!.setFieldValue("FIELD_NAME", "NAM2")
+            row!.setFieldValue("TYPE", "ERROR")
+            row!.setFieldValue("MESSAGE","NAME2 length doesn't match")
+            rs!.add(row!)
+        endif
+
+        if dr!.contains("STR") and dr!.getFieldAsString("STR").trim().length() > 30 then
+            row!.setFieldValue("FIELD_NAME", "STR")
+            row!.setFieldValue("TYPE", "ERROR")
+            row!.setFieldValue("MESSAGE","STR length doesn't match")
+            rs!.add(row!)
+        endif
+
+        if dr!.contains("PLZ") and dr!.getFieldAsString("PLZ").trim().length() > 10 then
+            row!.setFieldValue("FIELD_NAME", "PLZ")
+            row!.setFieldValue("TYPE", "ERROR")
+            row!.setFieldValue("MESSAGE","PLZ length doesn't match")
+            rs!.add(row!)
+        endif
+
+        if dr!.contains("ORT") and dr!.getFieldAsString("ORT").trim().length() > 30 then
+            row!.setFieldValue("FIELD_NAME", "ORT")
+            row!.setFieldValue("TYPE", "ERROR")
+            row!.setFieldValue("MESSAGE","ORT length doesn't match")
+            rs!.add(row!)
+        endif
+
+        if dr!.contains("GR") and dr!.getFieldAsString("GR").trim().length() > 2 then
+            row!.setFieldValue("FIELD_NAME", "GR")
+            row!.setFieldValue("TYPE", "ERROR")
+            row!.setFieldValue("MESSAGE","GRUPPE length doesn't match")
+            rs!.add(row!)
+        endif
+
+        if dr!.contains("SACHB") and dr!.getFieldAsString("SACHB").trim().length() > 30 then
+            row!.setFieldValue("FIELD_NAME", "SACHB")
+            row!.setFieldValue("TYPE", "ERROR")
+            row!.setFieldValue("MESSAGE","SACHB length doesn't match")
+            rs!.add(row!)
+        endif
+
+        if dr!.contains("BLZ") and dr!.getFieldAsString("BLZ").trim().length() > 10 then
+            row!.setFieldValue("FIELD_NAME", "BLZ")
+            row!.setFieldValue("TYPE", "ERROR")
+            row!.setFieldValue("MESSAGE","BLZ length doesn't match")
+            rs!.add(row!)
+        endif
+
+        if dr!.contains("KTO") and dr!.getFieldAsString("KTO").trim().length() > 10 then
+            row!.setFieldValue("FIELD_NAME", "KTO")
+            row!.setFieldValue("TYPE", "ERROR")
+            row!.setFieldValue("MESSAGE","KTO length doesn't match")
+            rs!.add(row!)
+        endif
+
+        if dr!.contains("BANK") and dr!.getFieldAsString("BANK").trim().length() > 30 then
+            row!.setFieldValue("FIELD_NAME", "BANK")
+            row!.setFieldValue("TYPE", "ERROR")
+            row!.setFieldValue("MESSAGE","BANK length doesn't match")
+            rs!.add(row!)
+        endif
+
+        methodret rs!
+    methodend
+
+    method public ResultSet validateRemove(DataRow dr!)
+        declare ResultSet rs!
+        declare DataRow row!
+        
+        rs! = new ResultSet()
+        row! = new DataRow()
+    
+        if dr! = null() OR !dr!.contains("NR") then
+            row!.setFieldValue("FIELD_NAME", "NR")
+            row!.setFieldValue("TYPE", "ERROR")
+            row!.setFieldValue("MESSAGE","Missing field NR")
+            rs!.add(row!)
+        
+            methodret rs!
+        endif
+
+        if dr!.getFieldAsString("NR").trim().length() > 9 then
+            row!.setFieldValue("FIELD_NAME", "NR")
+            row!.setFieldValue("TYPE", "ERROR")
+            row!.setFieldValue("MESSAGE","NR length doesn't match")
+            rs!.add(row!)
+        endif
+
+        methodret rs!
+    methodend
+
+    method public DataRow write(DataRow dr!)
+        declare BBjString nr!
+        declare DataRow error!
+        declare Boolean update!
+        
+        nr! = dr!.getFieldAsString("NR")
+
+        if nr!.isEmpty() then 
+            rem creating a new entry and reading the last key
+            rem and incrementing it by one
+            update! = 0
+            seterr error
+                ch = unt
+                open(ch) "jad200"
+                    lock(ch)
+                    extract record(ch,KEY="899990000",KNUM=0,ERR=*NEXT)
+                    nr! = str(num(keyp(ch)) + 1)
+                    dr!.setFieldValue("NR",nr!)
+                close(ch)
+                goto write
+            error:
+                errmsg! = errmes(-1)
+                errcode! = err()
+                close(ch,err=*next)
+                throw errmsg!, errcode!   
+        endif
+
+        scopeDef! = #super!.getScopeDef()
+
+        query! = ""
+        query! = query! + "SELECT "
+        query! = query! + "    NR "
+        query! = query! + "FROM "
+        query! = query! + "    LIEF_STAMM "
+        query! = query! + "WHERE "
+        query! = query! + "    NR = " + nr!
+
+        #super!.setRetrieveSql(query!)
+        #super!.setScopeDef(scopeDef!)
+        
+        rs! = #super!.retrieve()
+
+        #super!.setRetrieveSql(#defaultQuery!)
+        #super!.setScopeDef(scopeDef!)
+
+        if !rs!.isEmpty() then
+            rem we can update freely since the NR exists
+            update! = 1
+            goto write
+        else
+            rem creation with is only with an empty NR allowed
+            error! = new DataRow()
+
+            error!.setFieldValue("FIELD_NAME", "NR")
+            error!.setFieldValue("TYPE", "ERROR")
+            error!.setFieldValue("MESSAGE","Provide an empty NR when trying to creating a new one.")
+            
+            methodret error!
+        endif
+
+        write:
+        dim tpls$:#tpl!
+        dr!.setTemplate(#tpl!)
+
+        key$ = dr!.getFieldAsString("NR")
+        seterr error
+            ch = unt 
+            open(ch) "jad200"
+                lock(ch)
+                if update! then 
+                    write record(ch,KEY=key$) dr!.getString()
+                else
+                    write record(ch) dr!.getString()
+                endif
+                extract record(ch,KEY=key$) tpls$
+            close(ch)
+            methodret DataRow.fromTemplate(#tpl!,tpls$)
+        error:
+            errmsg! = errmes(-1)
+            errcode! = err()
+            close(ch,err=*next)
+            throw errmsg!, errcode!
+    methodend
+
+    method public ResultSet retrieve(BBjInt first!, BBjInt last!)
+        declare DataRow filter!
+        declare BBjString searchValue!
+        declare ResultSet rs!
+
+        filter! = #getFilter()
+
+        if !filter!.contains("%SEARCH") then 
+            methodret #super!.retrieve(first!,last!)
+        endif
+
+        searchValue! = filter!.getFieldAsString("%SEARCH")
+        filter!.removeField("%SEARCH")
+
+        scopeDef! = #super!.getScopeDef()
+
+        rem Lucene search
+        query! = ""
+        query! = query! + "SELECT "
+        query! = query! + "    LIEF_STAMM.* "
+        query! = query! + "FROM"
+        query! = query! + "    (CALL BBJ_SEARCH_TABLE('LIEF_STAMM', '*" + searchValue! + "*','0'))"
+
+        #super!.setRetrieveSql(query!)
+        #super!.setScopeDef(scopeDef!)
+
+        rs! = #super!.retrieve(first!,last!)
+
+        #super!.setRetrieveSql(#defaultQuery!)
+        #super!.setScopeDef(scopeDef!)
+
+        methodret rs!
+    methodend
+
+    method public ResultSet retrieve()
+        methodret #retrieve(-1, -1)
+    methodend
+
+    method private DataRow retrieveWithKey(BBjString key!)
+        dim tpls$:#tpl!
+
+        seterr error
+            ch = unt 
+            open(ch) "jad200"
+                extract record(ch,KEY=key!) tpls$
+            close(ch)
+            methodret DataRow.fromTemplate(#tpl!,tpls$)
+        error:
+            errmsg! = errmes(-1)
+            errcode! = err()
+            close(ch,err=*next)
+            throw errmsg!, errcode!
+    methodend
+
+    method public DataRow retrieveFirstEntry()
+        ch = unt
+        seterr error
+            open(ch) "jad200"
+                key$ = keyf(ch)
+            close(ch)
+            methodret #retrieveWithKey(key$)
+        error:
+            close(ch,err=*next)
+            methodret new DataRow()
+    methodend
+
+    method public DataRow retrieveNextEntry(BBjString currentKey!)
+        ch = unt
+        seterr error
+            open(ch) "jad200"
+                extract record(ch,KEY=currentKey!,err=*next) 
+                key$ = keyn(ch)
+            close(ch)
+            methodret #retrieveWithKey(key$)  
+        error:
+            close(ch,err=*next)
+            methodret new DataRow()
+    methodend
+
+    method public DataRow retrievePreviousEntry(BBjString currentKey!)
+        ch = unt
+        seterr error
+            open(ch) "jad200"
+                extract record(ch,KEY=currentKey!,err=*next)
+                key$ = keyp(ch)
+            close(ch)
+            methodret #retrieveWithKey(key$)  
+        error:
+            close(ch,err=*next)
+            methodret new DataRow()
+    methodend
+
+    method public DataRow retrieveLastEntry()
+        ch = unt
+        seterr error
+            open(ch) "jad200"
+                key$ = keyl(ch)
+            close(ch)
+            methodret #retrieveWithKey(key$)  
+        error:
+            close(ch,err=*next)
+            methodret new DataRow()
+    methodend
+
+classend
+
+bc! = new SuppliersBC()
+? bc!.retrieveFirstEntry()
+escape
+? bc!.retrieveNextEntry("704797954")
+escape
+? bc!.retrievePreviousEntry("704797955")
+escape
+? bc!.retrieveLastEntry()
+
+rem filter! = new DataRow()
+rem filter!.setFieldValue("%SEARCH","BASIS")
+
+rem dr! = new DataRow()
+rem dr!.setFieldValue("NR","123456789")
+rem dr!.setFieldValue("NAME1","BASIS")
+rem dr!.setFieldValue("STR","Nell-Breuning-Allee 6")
+
+rem dr! = new DataRow()
+rem dr!.setFieldValue("NR","123456789")
+
+rem bc!.setFilter(filter!)
+rem bc!.setScope("K")
+
+rem dr! = bc!.write(dr!)
+
+rem dr! = bc!.retrieve()
+
+rem bc!.remove(dr!)

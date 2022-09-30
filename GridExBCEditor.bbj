@@ -1,0 +1,406 @@
+use com.basiscomponents.db.ResultSet
+use com.basiscomponents.db.DataRow
+use com.basiscomponents.db.DataField
+
+use com.basiscomponents.bc.BusinessComponent
+
+use com.google.gson.JsonObject
+use com.google.gson.JsonArray
+use com.google.gson.JsonElement
+use com.google.gson.JsonParser
+
+use java.sql.Types
+use java.util.HashMap
+
+use ::BBjGridExWidget/GxClientEvents.bbj::GxClientEventsCell
+use ::BBjGridExWidget/GxClientModels.bbj::GxClientCellModel
+use ::BBjGridExWidget/GxRenderers.bbj::GxRendererCustomHTML
+use ::BBjGridExWidget/BBjGridExWidget.bbj::BBjGridExWidget
+use ::BBjGridExWidget/GxOptions.bbj::GxOptions
+use ::BBjGridExWidget/GxColumns.bbj::GxColumn
+
+class public GridExBCEditor 
+    field private BusinessComponent bc!
+    field public BBjGridExWidget gridex!
+
+    field private DataRow creationRow!
+    field private BBjVector nonEditableFields! = new BBjVector()
+    field private BBjVector primaryKeys! = new BBjVector()
+
+    field private BBjString creationIndex! = "__INDEX__"
+    field private BBjString actionTypeDelete! = "DELETE"
+    field private BBjString lastEditableField! = ""
+    field private BBjString creationField! = ""
+    field private BBjString trashIcon! = "<svg xmlns=""http://www.w3.org/2000/svg"" width=""24"" height=""24"" viewBox=""0 0 24 24"" stroke-width=""2"" stroke=""currentColor"" fill=""none"" stroke-linecap=""round"" stroke-linejoin=""round""> <path stroke=""none"" d=""M0 0h24v24H0z""/> <line x1=""4"" y1=""7"" x2=""20"" y2=""7"" /> <line x1=""10"" y1=""11"" x2=""10"" y2=""17"" /> <line x1=""14"" y1=""11"" x2=""14"" y2=""17"" /> <path d=""M5 7l1 12a2 2 0 0 0 2 2h8a2 2 0 0 0 2 -2l1 -12"" /> <path d=""M9 7v-3a1 1 0 0 1 1 -1h4a1 1 0 0 1 1 1v3"" /> </svg>"
+
+    field public BBjString ReadOnlyColumnColor! = "#EBECF0"
+
+    method public GridExBCEditor(BBjWindow wnd!,BusinessComponent bc!)
+        #gridex! = new BBjGridExWidget(wnd!,9876,0,0,wnd!.getWidth(),wnd!.getHeight())
+        #bc! = bc!
+        if (bc! = null()) then throw "BusinessComponent can't be null", 500
+        #setupGrid()
+        #initialize()
+    methodend
+
+    rem /**
+    rem  * Sets the Gridoptions and callbacks needed
+    rem  */
+    method private void setupGrid()
+        declare GxOptions options!
+
+        options! = #gridex!.getOptions()
+        options!.setStopEditingWhenGridLosesFocus(1)
+        
+        #gridex!.setCallback(#gridex!.ON_GRID_CELL_EDITING_STOPPED(),#this!,"onEditingCompleted")
+        #gridex!.setCallback(#gridex!.ON_GRID_CELL_CLICK(),#this!,"onCellClick")
+        #gridex!.setCallback(#gridex!.ON_GRID_STATE_CHANGE(),#this!,"onStateChange")
+    methodend
+    
+    rem /**
+    rem  * Creates the columndefinitions, the actioncolumns and the creationColumn and sets the Data retrieved if any
+    rem  */
+    method private void initialize()
+        declare DataRow columnDefintions!
+        declare ResultSet rs!
+        
+        columnDefinitions! = #bc!.getNewObjectTemplate(null())
+
+        for i = 0 to columnDefinitions!.getColumnCount() -1 
+            name! = columnDefinitions!.getColumnName(i)
+            field! = columnDefinitions!.getField(name!)
+            attr! = field!.getAttributes()
+
+            columnTypeName! = str(attr!.get("ColumnTypeName"))
+
+            #gridex!.addColumn(#createColumnDefiniton(name!,attr!,i))
+        next i
+        
+        rem creating an action column to delete
+        #gridex!.addColumn(#createActionColumn(#actionTypeDelete!))
+        #gridex!.addStyle("[col-id=" + #actionTypeDelete! + "]", "{""transition"":""all 0.2s ease-in-out""}")
+        #gridex!.addStyle("[col-id=" + #actionTypeDelete! + "]:hover", "{""color"":""#f44336""}")
+        
+        #constructCreationRow()
+        
+        if (#creationRow! <> null()) then
+            pinnedRs! = new ResultSet()
+            pinnedRs!.add(#creationRow!)
+            #gridex!.setPinnedBottomRows(pinnedRs!)
+        endif
+
+        rs! = #bc!.retrieve(err=*next)
+
+        if (rs! = null()) then 
+            reason! = str(errmes(-1))
+            if (reason! = "") then
+                reason! = "Unknown"
+            endif
+            a = msgbox("Could not read Data from the BC" +$0a$ + "Reason: " + reason!, 0, "Error")
+            rs! = new ResultSet()
+        endif
+ 
+        #gridex!.setData(rs!)
+    methodend
+
+    rem /**
+    rem  * Creates an action Column
+    rem  */
+    method private GxColumn createActionColumn(BBjString type!)
+        declare GxColumn column!
+
+        rem adding the action to the non editable fields so its not seen as a editable field
+        #nonEditableFields!.add(type!)
+
+        column! = new GxColumn(type!,"",Types.INTEGER)
+        column!.setSuppressMenu(1)
+        column!.setMaxWidth(60)
+        column!.setAlignment(#gridex!.GRID_ALIGN_CENTER())
+        column!.setSuppressSizeToFit(1)
+        column!.setResizable(0)
+        column!.setSortable(0)
+        column!.setSuppressNavigable(1)
+        column!.setPinned(GxColumn.PINNED_RIGHT())
+        column!.setCellRenderer(new GxRendererCustomHTML(String.format("<%%= params.data.__INDEX__ ? '' : '%s' %%>", #trashIcon!)))
+
+        methodret column!
+    methodend
+
+    rem /**
+    rem  * Creates GxColumn definitons based on the field, the attributes record and the index
+    rem  */
+    method private GxColumn createColumnDefiniton(String field!, HashMap attr!, BBjNumber index!)
+        declare GxColumn column!
+        declare BBjNumber editable!
+        declare BBjNumber isPrimaryKey!
+        declare BBjString editExp!
+        declare BBjNumber nullable!
+        declare BBjString label!
+
+        isPrimaryKey! = 0
+
+        editExp! = "data.hasOwnProperty(""__INDEX__"")"
+        editable! = num(attr!.get("EDITABLE"))
+        label! = str(attr!.get("COLUMNLABEL"))
+
+        nullable! = num(attr!.get("Nullable"))
+        if(nullable! = 2) then nullable! = 0
+
+        ? field!
+        ? editable!
+
+        if (editable! = 2) then
+            editable! = 0 
+            isPrimaryKey! = 1
+            #primaryKeys!.add(field!)
+            #lastEditableField! = field!
+        endif
+
+        column! = new GxColumn(field!,label!)
+
+        if(!editable! and isPrimaryKey!) then
+            column!.setEditableExpression(editExp!)
+        endif
+        
+        if (index! = 0) then
+            #creationField! = field!
+            column!.setCellRenderer(new GxRendererCustomHTML("<%= !params.value ? '<span style=""color:gray"">&#x2b; Add new</span>' : params.value %>"))
+        endif
+        
+        if (editable!) then
+            column!.setEditable(1)
+            #lastEditableField! = field!
+        else
+            if(!isPrimaryKey!) then #nonEditableFields!.add(field!)
+            
+            rem if no backcolor indication is wanted, makes no sense since after object creation this called instantly
+            rem would not honor it right now 
+            if (#ReadOnlyColumnColor! = null()) then methodret column!
+
+            classname! = field! + "-BackColor"
+            style! = new JsonObject()
+            style!.addProperty("background",#ReadOnlyColumnColor!)
+
+            #gridex!.addStyle("." + classname!,style!)
+            column!.getCellClass().add(classname!)   
+        endif
+
+        methodret column!
+    methodend
+
+    rem /**
+    rem  * Contructs the "creationRow" which is a row that is pinned to the bottom and can be used to create new entrys
+    rem  * Uses the getNewObjectTemplate() method from the BC to get the columns
+    rem  */
+    method private void constructCreationRow() 
+        declare auto DataRow row!
+        declare DataRow drDefinitions!
+        declare BBjString index!
+
+        row! = new DataRow()
+        index! = java.util.UUID.randomUUID().toString()
+        drDefinitions! = #bc!.getNewObjectTemplate(null())
+        
+        if(drDefinitions! = null() or drDefinitions!.isEmpty()) methodret
+
+        for i = 0 to drDefinitions!.getColumnCount() -1
+            cname! = drDefinitions!.getColumnName(i)
+            row!.setFieldValue(cname!,"")
+        next i
+
+        row!.setFieldValue(#creationIndex!,Types.VARCHAR,index!)
+        #creationRow! = row!
+    methodend
+
+    rem /**
+    rem  * Builds the DataRow whith all the priamry keys and returns it
+    rem  */
+    method private DataRow buildDeleteRow(DataRow data!)
+        declare DataRow dr!
+        declare auto BBjString field!
+        dr! = new DataRow()
+
+        if (#primaryKeys!.isEmpty()) then methodret dr!
+        
+        for i = 0 to #primaryKeys!.size() -1 
+            field! = #primaryKeys!.get(i)
+            dr!.setFieldValue(field!,data!.getFieldAsString(field!))
+        next i 
+
+        methodret dr!
+    methodend
+
+    rem /**
+    rem  * This method saves the changes to the BC
+    rem  * If it does not update a record it creates a new one instead
+    rem  * It is inserted at the top
+    rem  * If any errors occur while writing they are cought and reported by a message box
+    rem  */
+    method private void saveChanges(DataRow data!)
+        declare ResultSet errorRs!
+        declare DataRow result!
+        declare BBjNumber update!
+        declare ResultSet backup!
+     
+        update! = 1
+        rem only needed if we create a new entry
+        if (data!.contains(#creationIndex!)) then
+            data!.removeField(#creationIndex!)
+            update! = 0
+        endif
+        rem we clone the rs with the data beacuse in case of an error we can set it again
+        backup! = #gridex!.getPinnedBottomRows().clone()
+        
+        rem we clear the creationRow
+        #creationRow!.clear()
+
+        rem we add the cleared row so if no error happens the user can freely create the next one
+        pinnedRows! = new ResultSet()
+        pinnedRows!.add(#creationRow!)
+        #gridex!.setPinnedBottomRows(pinnedRows!)
+
+        rem we focus the first field in the creationRow and start the edit process again
+        #gridex!.setVisibleColumn(#creationField!)
+        #gridex!.setStartCellEditing(0,#creationField!,-1,"",#gridex!.GRID_FLOATING_BOTTOM())
+        #gridex!.focus(0,#creationField!,#gridex!.GRID_FLOATING_BOTTOM())
+
+        rem we check if the entered data is valid
+        errorRs! = #bc!.validateWrite(data!)
+
+        if (errorRs!.isEmpty()) then 
+            dr! = #bc!.write(data!)
+            if (!update! and dr! <> null() and !dr!.isEmpty()) then
+                ? "update grid and clear creationRow"
+                #gridex!.addRow(dr!)
+                methodret
+            endif
+        else
+            message! = "The following error occured while trying to save:"
+
+            if errorRs!.size() > 1 then
+                message! = "The following errors occured while trying to save:"
+            endif
+
+            for i = 0 to errorRs!.size() -1 
+                dr! = errorRs!.get(i)
+                error! = dr!.getFieldAsString("error")
+                message! = message! + $0a$ + error! 
+            next i
+            a = msgbox(message!,1,"Error")
+        endif
+        
+        rem we set the data again so the user can edit the dataset and retry saving
+        #gridex!.setPinnedBottomRows(backup!)
+
+        rem we focus the editing field and start the  so the user can make changes so the data get written next time
+        #gridex!.setVisibleColumn(#creationField!)
+        #gridex!.setStartCellEditing(0,#creationField!,-1,"",#gridex!.GRID_FLOATING_BOTTOM())
+        #gridex!.focus(0,#creationField!,#gridex!.GRID_FLOATING_BOTTOM())
+    methodend
+
+    rem /**
+    rem  * Callback for when the editing completes
+    rem  * checks if it from editing a cell or from creating a new entry
+    rem  */
+    method public void onEditingCompleted(BBjCustomEvent ev!)
+        declare auto GxClientEventsCell cell!
+        declare DataRow dr!
+        declare BBjNumber isCreation!
+        declare BBjString cname!
+
+        cell! = ev!.getObject()
+        dr! = cell!.getRow().asDataRow()
+        cname! = cell!.getColumn().getName()
+        dr!.setFieldValue(cname!,cell!.getValue())
+        isCreation! = dr!.contains(#creationIndex!)
+        
+        if (!isCreation!)#saveChanges(dr!)
+        rem we need to clone here because we remove the __index__ field bevor writing which would cause
+        rem the next check for isCreation to fail
+        if (isCreation! and cname! = #lastEditableField!) #saveChanges(dr!.clone())
+    methodend
+
+    rem /**
+    rem  * Event callback for the onCellClick
+    rem  * used to delete a row
+    rem  */
+    method public void onCellClick(BBjCustomEvent event!)
+        declare auto GxClientEventsCell cellEvent!
+        declare auto GxClientCellModel cellModel!
+        declare auto DataRow row!
+        declare DataRow deleteRow!
+        declare ResultSet errorRs!
+
+        cellEvent!= event!.getObject()
+        cellModel! = cellEvent!.getCell()
+        row! = cellModel!.getRow().asDataRow()
+        currentColumn! = cellEvent!.getColumn().getName()
+        isCreationRow! = row!.contains(#creationIndex!)
+
+        if(currentColumn! = #actionTypeDelete! and !isCreationRow!) then
+            answer! = msgbox("Are you sure you want to delete this Row ?",1,"Delete Permanently")
+            if (answer! = 1) then
+         
+                rem build the deletion row
+                deleteRow! = #buildDeleteRow(row!)
+                if (deleteRow!.isEmpty()) then 
+                    a = msgbox("Could not delete record. No Primary Key found",1,"Error")
+                    methodret
+                endif
+
+                errorRs! = #bc!.validateRemove(deleteRow!)
+                if (errorRs!.isEmpty()) then 
+                    #bc!.remove(deleteRow!)
+                    #gridex!.removeRow(row!)
+                else
+                    message! = "The following error occured while trying to delete:"
+
+                    if errorRs!.size() > 1 then
+                        message! = "The following errors occured while trying to delete:"
+                    endif
+
+                    for i = 0 to errorRs!.size() -1 
+                        dr! = errorRs!.get(i)
+                        error! = dr!.getFieldAsString("error")
+                        message! = message! + $0a$ + error! 
+                    next i
+
+                    rem display the errors
+                    a = msgbox(message!,1,"Error")
+                endif
+            endif
+        endif
+    methodend
+
+    rem /**
+    rem  * Event callback for when the Grid state changes 
+    rem  * checks if the lastEditableField is still the same and if not updates it
+    rem  */
+    method public void onStateChange(BBjCustomEvent ev!)
+        declare JsonArray jarray!
+        declare JsonObject json!
+        declare auto BBjString colName!
+        
+        json! = JsonParser.parseString(str(ev!.getObject())).getAsJsonObject()
+        jarray! = json!.get("columns").getAsJsonArray()
+        
+        if jarray!.size() <= 0 then methodret
+
+        for i = jarray!.size() -1 to 0 step -1
+            jobj! = jarray!.get(i)
+            colName! = jobj!.get("colId").getAsString()
+
+            if(colName! = #lastEditableField!) then 
+                ? "nothing changed methodret, " + str(i)
+                methodret
+            endif
+            
+            if (!#nonEditableFields!.contains(colName!)) then
+                ? "change detected at: " + str(i)
+                #lastEditableField! = colName!
+                ? "new last editbale field:" + colName!
+                methodret
+            endif
+        next i
+    methodend
+classend
