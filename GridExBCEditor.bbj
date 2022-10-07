@@ -18,6 +18,10 @@ use ::BBjGridExWidget/GxRenderers.bbj::GxRendererCustomHTML
 use ::BBjGridExWidget/BBjGridExWidget.bbj::BBjGridExWidget
 use ::BBjGridExWidget/GxOptions.bbj::GxOptions
 use ::BBjGridExWidget/GxColumns.bbj::GxColumn
+use ::BBjGridExWidget/GxCellEditors.bbj::GxCellEditorSelect
+
+
+use ::BCLookupHelper.bbj::BCLookupHelper
 
 class public GridExBCEditor 
     field private BusinessComponent bc!
@@ -26,6 +30,7 @@ class public GridExBCEditor
     field private DataRow creationRow!
     field private BBjVector nonEditableFields! = new BBjVector()
     field private BBjVector primaryKeys! = new BBjVector()
+    field private BBjVector lookupFields! = new BBjVector()
 
     field private BBjString creationIndex! = "__INDEX__"
     field private BBjString actionTypeDelete! = "DELETE"
@@ -36,7 +41,8 @@ class public GridExBCEditor
     field public BBjString ReadOnlyColumnColor! = "#EBECF0"
 
     method public GridExBCEditor(BBjWindow wnd!,BusinessComponent bc!)
-        #gridex! = new BBjGridExWidget(wnd!,9876,0,0,wnd!.getWidth(),wnd!.getHeight())
+        #gridex! = new BBjGridExWidget(wnd!,wnd!.getAvailableControlID(),0,0,wnd!.getWidth(),wnd!.getHeight())
+        rem #gridex!.setLicenseKey("sdmnjdahndas")
         #bc! = bc!
         if (bc! = null()) then throw "BusinessComponent can't be null", 500
         #setupGrid()
@@ -63,17 +69,21 @@ class public GridExBCEditor
     method private void initialize()
         declare DataRow columnDefintions!
         declare ResultSet rs!
-        
-        columnDefinitions! = #bc!.getNewObjectTemplate(null())
 
+        columnDefinitions! = #bc!.getAttributesRecord()
+        if (columnDefinitions! = null() or columnDefinitions!.isEmpty()) then 
+            a = msgbox("Missing Columndefinitons",1,"Error")
+            methodret
+        endif
+        
         for i = 0 to columnDefinitions!.getColumnCount() -1 
             name! = columnDefinitions!.getColumnName(i)
             field! = columnDefinitions!.getField(name!)
             attr! = field!.getAttributes()
 
-            columnTypeName! = str(attr!.get("ColumnTypeName"))
-
-            #gridex!.addColumn(#createColumnDefiniton(name!,attr!,i))
+            if(attr! <> null() and !attr!.isEmpty()) then
+                #gridex!.addColumn(#createColumnDefiniton(attr!))
+            endif
         next i
         
         rem creating an action column to delete
@@ -99,8 +109,23 @@ class public GridExBCEditor
             a = msgbox("Could not read Data from the BC" +$0a$ + "Reason: " + reason!, 0, "Error")
             rs! = new ResultSet()
         endif
- 
+
         #gridex!.setData(rs!)
+
+        if(#lookupFields!.isEmpty()) then methodret
+        rem building the GridCellEditors for the lookup fields
+        rem needs to be done after setData()
+        for i = 0 to #lookupFields!.size() -1
+            field! = str(#lookupFields!.get(i))
+            column! = #gridex!.getColumn(field!)
+            seterr error
+                helper! = new BCLookupHelper(#bc!.getLookup(field!, new DataRow()))
+                column!.setCellEditor(helper!.build())
+                continue
+            error:
+            msg! = "Could not build CellEditor for Column: " + field! + $0a$ + "Error: " + str(errmes(-1))
+            a = msgbox(msg!,1,"Error")
+        next i
     methodend
 
     rem /**
@@ -129,15 +154,18 @@ class public GridExBCEditor
     rem /**
     rem  * Creates GxColumn definitons based on the field, the attributes record and the index
     rem  */
-    method private GxColumn createColumnDefiniton(String field!, HashMap attr!, BBjNumber index!)
+    method private GxColumn createColumnDefiniton(HashMap attr!)
         declare GxColumn column!
         declare BBjNumber editable!
         declare BBjNumber isPrimaryKey!
         declare BBjString editExp!
         declare BBjNumber nullable!
         declare BBjString label!
+        declare BBjString field!
 
         isPrimaryKey! = 0
+
+        field! = str(attr!.get("ColumnLabel"))
 
         editExp! = "data.hasOwnProperty(""__INDEX__"")"
         editable! = num(attr!.get("EDITABLE"))
@@ -146,8 +174,17 @@ class public GridExBCEditor
         nullable! = num(attr!.get("Nullable"))
         if(nullable! = 2) then nullable! = 0
 
-        ? field!
-        ? editable!
+        rem ? field!
+        rem ? editable!
+
+        column! = new GxColumn(field!,label!)
+
+        lookup! = attr!.get("LOOKUP")
+        rem its value is true and not 1 
+        if(lookup! = null()) then lookup! = "0" else lookup! = "1"
+        if (num(lookup!)) then
+            #lookupFields!.add(field!)
+        endif
 
         if (editable! = 2) then
             editable! = 0 
@@ -156,15 +193,14 @@ class public GridExBCEditor
             #lastEditableField! = field!
         endif
 
-        column! = new GxColumn(field!,label!)
-
         if(!editable! and isPrimaryKey!) then
             column!.setEditableExpression(editExp!)
         endif
         
-        if (index! = 0) then
+        if (#primaryKeys!.size() = 1 and isPrimaryKey!) then
             #creationField! = field!
             column!.setCellRenderer(new GxRendererCustomHTML("<%= !params.value ? '<span style=""color:gray"">&#x2b; Add new</span>' : params.value %>"))
+            column!.setLockPosition(1)
         endif
         
         if (editable!) then
@@ -190,7 +226,7 @@ class public GridExBCEditor
 
     rem /**
     rem  * Contructs the "creationRow" which is a row that is pinned to the bottom and can be used to create new entrys
-    rem  * Uses the getNewObjectTemplate() method from the BC to get the columns
+    rem  * Uses the getAttributesRecord() method from the BC to get the columns
     rem  */
     method private void constructCreationRow() 
         declare auto DataRow row!
@@ -199,7 +235,8 @@ class public GridExBCEditor
 
         row! = new DataRow()
         index! = java.util.UUID.randomUUID().toString()
-        drDefinitions! = #bc!.getNewObjectTemplate(null())
+
+        drDefinitions! = #bc!.getAttributesRecord()
         
         if(drDefinitions! = null() or drDefinitions!.isEmpty()) methodret
 
@@ -259,40 +296,53 @@ class public GridExBCEditor
         pinnedRows!.add(#creationRow!)
         #gridex!.setPinnedBottomRows(pinnedRows!)
 
-        rem we focus the first field in the creationRow and start the edit process again
-        #gridex!.setVisibleColumn(#creationField!)
-        #gridex!.setStartCellEditing(0,#creationField!,-1,"",#gridex!.GRID_FLOATING_BOTTOM())
-        #gridex!.focus(0,#creationField!,#gridex!.GRID_FLOATING_BOTTOM())
+        #startCreationEdit()
 
         rem we check if the entered data is valid
+        rem TODO check for vector and accept both
         errorRs! = #bc!.validateWrite(data!)
 
-        if (errorRs!.isEmpty()) then 
-            dr! = #bc!.write(data!)
-            if (!update! and dr! <> null() and !dr!.isEmpty()) then
-                ? "update grid and clear creationRow"
-                #gridex!.addRow(dr!)
-                methodret
-            endif
-        else
-            message! = "The following error occured while trying to save:"
-
+        message! = "The following error occured while trying to save:"
+   
+        if (!errorRs!.isEmpty()) then 
             if errorRs!.size() > 1 then
                 message! = "The following errors occured while trying to save:"
             endif
-
+        
             for i = 0 to errorRs!.size() -1 
                 dr! = errorRs!.get(i)
                 error! = dr!.getFieldAsString("error")
                 message! = message! + $0a$ + error! 
             next i
             a = msgbox(message!,1,"Error")
+            rem we set the data again so the user can edit the dataset and retry saving
+            #gridex!.setPinnedBottomRows(backup!)
+            #startCreationEdit()
+            methodret 
+        endif
+
+        dr! = #bc!.write(data!,err=*next)
+
+        if(dr! = null() or dr!.isEmpty()) then 
+            message! = message! + $0a$ + str(errmes(-1))
+            a = msgbox(message!,1,"Error")
+
+            #gridex!.setPinnedBottomRows(backup!)
+            #startCreationEdit()
+            methodret 
         endif
         
-        rem we set the data again so the user can edit the dataset and retry saving
-        #gridex!.setPinnedBottomRows(backup!)
+        if (!update!) then
+            ? "update grid and clear creationRow"
+            #gridex!.addRow(dr!)
+            #startCreationEdit()
+        endif
+    methodend
 
-        rem we focus the editing field and start the  so the user can make changes so the data get written next time
+    rem /**
+    rem  * Sets the #creationField visible again and then starts the CellEditing on that column and focuses it
+    rem  */
+    method private void startCreationEdit()
         #gridex!.setVisibleColumn(#creationField!)
         #gridex!.setStartCellEditing(0,#creationField!,-1,"",#gridex!.GRID_FLOATING_BOTTOM())
         #gridex!.focus(0,#creationField!,#gridex!.GRID_FLOATING_BOTTOM())
@@ -339,36 +389,43 @@ class public GridExBCEditor
 
         if(currentColumn! = #actionTypeDelete! and !isCreationRow!) then
             answer! = msgbox("Are you sure you want to delete this Row ?",1,"Delete Permanently")
-            if (answer! = 1) then
+            if (answer! <> 1) then methodret
          
-                rem build the deletion row
-                deleteRow! = #buildDeleteRow(row!)
-                if (deleteRow!.isEmpty()) then 
-                    a = msgbox("Could not delete record. No Primary Key found",1,"Error")
-                    methodret
-                endif
-
-                errorRs! = #bc!.validateRemove(deleteRow!)
-                if (errorRs!.isEmpty()) then 
-                    #bc!.remove(deleteRow!)
-                    #gridex!.removeRow(row!)
-                else
-                    message! = "The following error occured while trying to delete:"
-
-                    if errorRs!.size() > 1 then
-                        message! = "The following errors occured while trying to delete:"
-                    endif
-
-                    for i = 0 to errorRs!.size() -1 
-                        dr! = errorRs!.get(i)
-                        error! = dr!.getFieldAsString("error")
-                        message! = message! + $0a$ + error! 
-                    next i
-
-                    rem display the errors
-                    a = msgbox(message!,1,"Error")
-                endif
+            rem build the deletion row
+            deleteRow! = #buildDeleteRow(row!)
+            if (deleteRow!.isEmpty()) then 
+                a = msgbox("Could not delete record. No Primary Key found",1,"Error")
+                methodret
             endif
+
+            rem TODO check for vector and accept both
+            errorRs! = #bc!.validateRemove(deleteRow!)
+            message! = "The following error occured while trying to delete:"
+
+            if (!errorRs!.isEmpty()) then 
+                if errorRs!.size() > 1 then
+                    message! = "The following errors occured while trying to delete:"
+                endif
+
+                for i = 0 to errorRs!.size() -1 
+                    dr! = errorRs!.get(i)
+                    error! = dr!.getFieldAsString("error")
+                    message! = message! + $0a$ + error! 
+                next i
+
+                rem display the errors
+                a = msgbox(message!,1,"Error")
+                methodret
+            endif
+
+            #bc!.remove(deleteRow!,err=error)
+            #gridex!.removeRow(row!)
+            methodret
+            
+            error:
+                message! = message! + $0a$ + str(errmes(-1))
+                a = msgbox(message!,1,"Error")
+            methodret
         endif
     methodend
 

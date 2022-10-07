@@ -2,11 +2,18 @@ use ::GridExBCEditor.bbj::GridExBCEditor
 use ::TestBCs/ChileCustomerTableBC.bbj::ChileCustomerTableBC
 use ::TestBCs/SuppliersBC.bbj::SuppliersBC
 
+use ::api/P360ProductsBC.bbj::P360ProductsBC
+use ::api/P360CartHeadersBC.bbj::P360CartHeadersBC
+
 use ::bbwindowutils.bbj::BBWindowUtils
 
 use com.basis.endpoints.DevicesBC
+use com.basiscomponents.bc.BusinessComponent
+
+use com.basis.GridExBCEditorBCs.EmployeBC
 
 use java.sql.DriverManager
+
 
 sysgui! = BBjAPI().openSysGui("X0")
 wnd! = sysgui!.addWindow(0,0,800,600,"GridExBCEditor")
@@ -17,10 +24,19 @@ wnd!.setCallback(BBjAPI.ON_RESIZE,"resize")
 declare GridExBCEditor editor!
 
 BBWindowUtils.centerWindow(wnd!)
-rem editor! = new GridExBCEditor(wnd!,null())
-editor! = new GridExBCEditor(wnd!,new ChileCustomerTableBC())
-rem editor! = new GridExBCEditor(wnd!, new SuppliersBC())
-rem editor! = new GridExBCEditor(wnd!,new DevicesBC(DriverManager.getConnection("jdbc:mysql://localhost:3306/Brevis2.0", "root", "admin123")))
+
+declare BusinessComponent bc!
+
+rem bc! = new P360CartHeadersBC()
+rem bc!.setScope("P")
+
+rem bc! = new ChileCustomerTableBC()
+rem bc! = new SuppliersBC()
+rem bc! = new DevicesBC(DriverManager.getConnection("jdbc:mysql://localhost:3306/Brevis2.0", "root", "admin123"))
+bc! = new EmployeBC(DriverManager.getConnection("jdbc:mysql://localhost:3306/BCEditorDemo", "root","x8RcEvQ07U3dsq2unAz7!"))
+
+editor! = new GridExBCEditor(wnd!, bc!)
+
 process_events
 
 resize:
