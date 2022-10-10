@@ -120,7 +120,14 @@ class public GridExBCEditor
             column! = #gridex!.getColumn(field!)
             seterr error
                 helper! = new BCLookupHelper(#bc!.getLookup(field!, new DataRow()))
-                column!.setCellEditor(helper!.build())
+                rem TODO remove later
+                
+                table! = "States"
+                if i = 1 then 
+                    table! = "Countries"
+                endif
+
+                column!.setCellEditor(helper!.buildSuggestions(table!))
                 continue
             error:
             msg! = "Could not build CellEditor for Column: " + field! + $0a$ + "Error: " + str(errmes(-1))

@@ -1,5 +1,6 @@
 use ::BBjGridExWidget/GxCellEditors.bbj::GxCellEditorRichSelect
 use ::BBjGridExWidget/GxCellEditors.bbj::GxCellEditorSelect
+use ::BBjGridExWidget/GxCellEditors.bbj::GxCellEditorSuggestion
 
 use com.basiscomponents.db.ResultSet
 use com.basiscomponents.db.DataRow
@@ -9,6 +10,11 @@ use com.google.gson.JsonArray
 
 use com.basiscomponents.bc.BusinessComponent
 
+use ::SQLResolver.bbj::SQLResolver
+use ::LuceneResolver.bbj::LuceneResolver
+
+use java.util.UUID
+
 class public BCLookupHelper 
 
     field private BusinessComponent bc!
@@ -17,25 +23,19 @@ class public BCLookupHelper
         #bc! = bc!
     methodend
 
-    method public GxCellEditorSelect build()
-        declare GxCellEditorSelect editor!
-        declare ResultSet rs!
-        declare DataRow dr!
+    rem search for primary key
+    rem look for a desc field and use that
 
-        rem search for primary key
-        rem look for a desc field and use that
+    rem if we find a _search/or a %search in the attr
+    rem we use the custom filter thing and we also need
+    rem to create a virtual column with primary key - desc 
+    rem and ask hyyan if we can have a onKeypressed and stuff to implement
+    rem a search like in the timesheets
+    method public GxCellEditorSuggestion buildSuggestions(BBjString table!)
+        declare GxCellEditorSuggestion suggestionEditor!
 
-        rem if we find a _search/or a %search in the attr
-        rem we use the custom filter thing and we also need
-        rem to create a virtual column with primary key - desc 
-        rem and ask hyyan if we can have a onKeypressed and stuff to implement
-        rem a search like in the timesheets
-
-        values! = new JsonArray()
-        editor! = new GxCellEditorSelect()
-        
         columnDefinitions! = #bc!.getAttributesRecord()
-        
+            
         for i = 0 to columnDefinitions!.getColumnCount() -1
             name! = columnDefinitions!.getColumnName(i) 
             field! = columnDefinitions!.getField(name!)
@@ -47,25 +47,16 @@ class public BCLookupHelper
             endif
         next i
 
-        fieldSel! = new BBjVector()
-        fieldSel!.add(primaryKeyField!)
-        fieldSel!.add("DESC")
-
-        #bc!.setFieldSelection(fieldSel!)
-
-        rs! = #bc!.retrieve(err=error)
-        
-        if (rs! <> null() or !rs!.isEmpty()) then
-         for x = 0 to rs!.size() -1
-                dr! = rs!.get(x)
-                values!.add(dr!.getFieldAsString(primaryKeyField!))
-            next x
+        uniqueID! = UUID.randomUUID().toString()
+        if (attr!.get("%SEARCH") = null()) then 
+            suggestionEditor! = new GxCellEditorSuggestion(uniqueID!, new SQLResolver(#bc!,table!,primaryKeyField!))
+        else
+            suggestionEditor! = new GxCellEditorSuggestion(uniqueID!, new LuceneResolver())
         endif
-        
-        editor!.setValues(values!)
-        methodret editor!
 
-        error:
-            throw str(errmes(-1)), 404
+        suggestionEditor!.setEmptyMessage("No match found")
+        suggestionEditor!.setShowOnFocus(1)
+
+        methodret suggestionEditor!
     methodend
 classend
