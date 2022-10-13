@@ -20,6 +20,10 @@ use ::BBjGridExWidget/GxOptions.bbj::GxOptions
 use ::BBjGridExWidget/GxColumns.bbj::GxColumn
 use ::BBjGridExWidget/GxCellEditors.bbj::GxCellEditorSelect
 
+use ::../../../../../GIT/SA/GridExBCEditor/Util.bbj::Util
+use::Util.bbj::Util
+
+use ::../../../../../GIT/SA/GridExBCEditor/BCLookupHelper.bbj::BCLookupHelper
 use ::BCLookupHelper.bbj::BCLookupHelper
 
 class public GridExBCEditor 
@@ -79,7 +83,7 @@ class public GridExBCEditor
             cname! = columnDefinitions!.getColumnName(i)
             field! = columnDefinitions!.getField(cname!)
             attr! = field!.getAttributes()
-
+ 
             if(attr! <> null() and !attr!.isEmpty()) then
                 #gridex!.addColumn(#createColumnDefiniton(cname!,attr!))
             endif
@@ -303,47 +307,40 @@ class public GridExBCEditor
         pinnedRows!.add(#creationRow!)
         #gridex!.setPinnedBottomRows(pinnedRows!)
 
-        #startCreationEdit()
-
-        rem we check if the entered data is valid
-        rem TODO check for vector and accept both
-        errorRs! = #bc!.validateWrite(data!)
-
-        message! = "The following error occured while trying to save:"
-   
-        if (!errorRs!.isEmpty()) then 
-            if errorRs!.size() > 1 then
-                message! = "The following errors occured while trying to save:"
-            endif
+        if(!update!) then #startCreationEdit()
         
-            for i = 0 to errorRs!.size() -1 
-                dr! = errorRs!.get(i)
-                error! = dr!.getFieldAsString("error")
-                message! = message! + $0a$ + error! 
-            next i
-            a = msgbox(message!,1,"Error")
-            rem we set the data again so the user can edit the dataset and retry saving
+        rem we check if the entered data is valid
+        errors! = #bc!.validateWrite(data!)
+
+        rem since errors can either be a rs or a vector we can call isEmpty() either way
+        default! = "The following error occured while trying to save:"
+        if (!errors!.isEmpty()) then 
+            multiple! = "The following errors occured while trying to save:"
+
+            Util.buildError(errors!,default!,multiple!)
+            if(update!) then methodret
+
             #gridex!.setPinnedBottomRows(backup!)
             #startCreationEdit()
-            methodret 
+            methodret
         endif
-
+   
         dr! = #bc!.write(data!,err=*next)
 
         if(dr! = null() or dr!.isEmpty()) then 
-            message! = message! + $0a$ + str(errmes(-1))
+            message! = default! + $0a$ + str(errmes(-1))
             a = msgbox(message!,1,"Error")
+            if (update!) then methodret
 
             #gridex!.setPinnedBottomRows(backup!)
             #startCreationEdit()
             methodret 
         endif
         
-        if (!update!) then
-            ? "update grid and clear creationRow"
-            #gridex!.addRow(dr!)
-            #startCreationEdit()
-        endif
+        if (update!) then methodret
+        ? "update grid and clear creationRow"
+        #gridex!.addRow(dr!)
+        #startCreationEdit()
     methodend
 
     rem /**
@@ -370,11 +367,13 @@ class public GridExBCEditor
         cname! = cell!.getColumn().getName()
         dr!.setFieldValue(cname!,cell!.getValue())
         isCreation! = dr!.contains(#creationIndex!)
-        
-        if (!isCreation!)#saveChanges(dr!)
+
+
+        rem we remove the nonEditableFields because in some BC's they cause issues
+        if (!isCreation!)#saveChanges(Util.removeFields(dr!,#nonEditableFields!))
         rem we need to clone here because we remove the __index__ field bevor writing which would cause
         rem the next check for isCreation to fail
-        if (isCreation! and cname! = #lastEditableField!) #saveChanges(dr!.clone())
+        if (isCreation! and cname! = #lastEditableField!) #saveChanges(Util.removeFields(dr!.clone(),#nonEditableFields!))
     methodend
 
     rem /**
@@ -394,46 +393,33 @@ class public GridExBCEditor
         currentColumn! = cellEvent!.getColumn().getName()
         isCreationRow! = row!.contains(#creationIndex!)
 
-        if(currentColumn! = #actionTypeDelete! and !isCreationRow!) then
-            answer! = msgbox("Are you sure you want to delete this Row ?",1,"Delete Permanently")
-            if (answer! <> 1) then methodret
-         
-            rem build the deletion row
-            deleteRow! = #buildDeleteRow(row!)
-            if (deleteRow!.isEmpty()) then 
-                a = msgbox("Could not delete record. No Primary Key found",1,"Error")
-                methodret
-            endif
+        if(currentColumn! <> #actionTypeDelete! or isCreationRow!) then methodret
 
-            rem TODO check for vector and accept both
-            errorRs! = #bc!.validateRemove(deleteRow!)
-            message! = "The following error occured while trying to delete:"
-
-            if (!errorRs!.isEmpty()) then 
-                if errorRs!.size() > 1 then
-                    message! = "The following errors occured while trying to delete:"
-                endif
-
-                for i = 0 to errorRs!.size() -1 
-                    dr! = errorRs!.get(i)
-                    error! = dr!.getFieldAsString("error")
-                    message! = message! + $0a$ + error! 
-                next i
-
-                rem display the errors
-                a = msgbox(message!,1,"Error")
-                methodret
-            endif
-
-            #bc!.remove(deleteRow!,err=error)
-            #gridex!.removeRow(row!)
-            methodret
-            
-            error:
-                message! = message! + $0a$ + str(errmes(-1))
-                a = msgbox(message!,1,"Error")
+        answer! = msgbox("Are you sure you want to delete this Row ?",1,"Delete Permanently")
+        if (answer! <> 1) then methodret
+        
+        rem build the deletion row
+        deleteRow! = #buildDeleteRow(row!)
+        if (deleteRow!.isEmpty()) then 
+            a = msgbox("Could not delete record. No Primary Key found",1,"Error")
             methodret
         endif
+
+        errors! = #bc!.validateRemove(deleteRow!)
+        
+        default! = "The following error occured while trying to delete:"
+        if(!errors!.isEmpty()) then 
+            multiple! = "The following errors occured while trying to delete:"
+            Util.buildError(errors!,default!,multiple!)
+        endif
+
+        #bc!.remove(deleteRow!,err=error)
+        #gridex!.removeRow(row!)
+        methodret
+        
+        error:
+            message! = default! + $0a$ + str(errmes(-1))
+            a = msgbox(message!,1,"Error")
     methodend
 
     rem /**

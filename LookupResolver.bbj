@@ -8,36 +8,45 @@ class public LookupResolver extends GxCellEditorSuggestionResolver
     field private BusinessComponent bc!
     field private BBjString primaryKey!
     field private BBjString label!
+    field private BBjNumber useSearch!
 
-    method public LookupResolver(BusinessComponent bc!, BBjString primaryKey!, BBjString label!)
+    method public LookupResolver(BusinessComponent bc!, BBjString primaryKey!, BBjString label!, BBjNumber useSearch!)
         #bc! = bc!
         #primaryKey! = primaryKey!
         #label! = label!
+        #useSearch! = useSearch!
     methodend
 
     method public void doResolve(BBjString term!)
-        declare DataRow filter!    
+        declare DataRow filter!
+        declare BBjNumber hasLabel!    
         rem we gonna remove this all and set %SEARCH into the filter and let the bc handle it.
         rem we need to check for %search in the fields from the bc
         rem if we dont see the %search we need some default alternation
-
         rem for the desc thing we should add a label attribute to dynamicly
+
         filter! = new DataRow()
-        filter!.setFieldValue("%SEARCH",term!)
-
-        #bc!.setFilter(filter!)
-        rs! = #bc!.retrieve(err=error)
- 
-        if(rs! <> null() and rs!.count() > 0)
-            
-            for i = 0 to rs!.size() -1
-                dr! = rs!.get(i)
-                value! = dr!.getFieldAsString(#primaryKey!)
-                desc! = value! + " - " + dr!.getFieldAsString(#label!)
-
-                #addItem(desc!, value!)
-            next i
+        hasLabel! = 0
+        
+        if (#useSearch!) then
+            filter!.setFieldValue("%SEARCH",term!)
+            #bc!.setFilter(filter!)
         endif
+
+        rs! = #bc!.retrieve(err=error)
+        if(rs! = null() or rs!.isEmpty()) then methodret
+
+        if(rs!.get(0).contains(#label!)) then hasLabel! = 1
+
+        for i = 0 to rs!.size() -1
+            dr! = rs!.get(i)
+            value! = dr!.getFieldAsString(#primaryKey!)
+            desc! = value!
+            if(hasLabel!) then
+                desc! = value! + " - " + dr!.getFieldAsString(#label!)
+            endif
+            #addItem(desc!, value!)
+        next i
         methodret
 
         error:
