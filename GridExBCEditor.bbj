@@ -20,7 +20,6 @@ use ::BBjGridExWidget/GxOptions.bbj::GxOptions
 use ::BBjGridExWidget/GxColumns.bbj::GxColumn
 use ::BBjGridExWidget/GxCellEditors.bbj::GxCellEditorSelect
 
-
 use ::BCLookupHelper.bbj::BCLookupHelper
 
 class public GridExBCEditor 
@@ -77,12 +76,12 @@ class public GridExBCEditor
         endif
         
         for i = 0 to columnDefinitions!.getColumnCount() -1 
-            name! = columnDefinitions!.getColumnName(i)
-            field! = columnDefinitions!.getField(name!)
+            cname! = columnDefinitions!.getColumnName(i)
+            field! = columnDefinitions!.getField(cname!)
             attr! = field!.getAttributes()
 
             if(attr! <> null() and !attr!.isEmpty()) then
-                #gridex!.addColumn(#createColumnDefiniton(attr!))
+                #gridex!.addColumn(#createColumnDefiniton(cname!,attr!))
             endif
         next i
         
@@ -119,17 +118,18 @@ class public GridExBCEditor
             field! = str(#lookupFields!.get(i))
             column! = #gridex!.getColumn(field!)
             seterr error
-                helper! = new BCLookupHelper(#bc!.getLookup(field!, new DataRow()))
-                rem TODO remove later
-                
-                table! = "States"
-                if i = 1 then 
-                    table! = "Countries"
-                endif
+                lookupbc! = #bc!.getLookup(field!, new DataRow())
+                if (lookupbc! = null()) then continue  
 
-                column!.setCellEditor(helper!.buildSuggestions(table!))
+                helper! = new BCLookupHelper(lookupbc!)
+
+                editor! = helper!.buildSuggestions()
+                if(editor! <> null()) then
+                    column!.setCellEditor(editor!)
+                endif
                 continue
             error:
+            rem Question do we want to make the lookup non editable if the celleditor building fails ?
             msg! = "Could not build CellEditor for Column: " + field! + $0a$ + "Error: " + str(errmes(-1))
             a = msgbox(msg!,1,"Error")
         next i
@@ -159,30 +159,30 @@ class public GridExBCEditor
     methodend
 
     rem /**
-    rem  * Creates GxColumn definitons based on the field, the attributes record and the index
+    rem  * Creates GxColumn definitons based on the field and the attributes record
     rem  */
-    method private GxColumn createColumnDefiniton(HashMap attr!)
+    method private GxColumn createColumnDefiniton(BBjString field!,HashMap attr!)
         declare GxColumn column!
         declare BBjNumber editable!
         declare BBjNumber isPrimaryKey!
         declare BBjString editExp!
-        declare BBjNumber nullable!
         declare BBjString label!
-        declare BBjString field!
 
         isPrimaryKey! = 0
+        editable! = 0
+        label! = field!
 
-        field! = str(attr!.get("ColumnLabel"))
-
+        rem todo write helper method to get attribute from attr
         editExp! = "data.hasOwnProperty(""__INDEX__"")"
-        editable! = num(attr!.get("EDITABLE"))
-        label! = str(attr!.get("COLUMNLABEL"))
+        attribute! = attr!.get("EDITABLE")
+        if(attribute! <> null()) then 
+            editable! = num(attribute!) 
+        endif
 
-        nullable! = num(attr!.get("Nullable"))
-        if(nullable! = 2) then nullable! = 0
-
-        rem ? field!
-        rem ? editable!
+        attribute! = attr!.get("COLUMNLABEL")
+        if(attribute! <> null()) then
+            label! = str(attribute!)
+        endif
 
         column! = new GxColumn(field!,label!)
 

@@ -1,19 +1,17 @@
-use ::BBjGridExWidget/GxCellEditors.bbj::GxCellEditorRichSelect
-use ::BBjGridExWidget/GxCellEditors.bbj::GxCellEditorSelect
-use ::BBjGridExWidget/GxCellEditors.bbj::GxCellEditorSuggestion
-
 use com.basiscomponents.db.ResultSet
 use com.basiscomponents.db.DataRow
 use com.basiscomponents.db.DataField
+use com.basiscomponents.bc.BusinessComponent
 
 use com.google.gson.JsonArray
 
-use com.basiscomponents.bc.BusinessComponent
-
-use ::SQLResolver.bbj::SQLResolver
-use ::LuceneResolver.bbj::LuceneResolver
-
 use java.util.UUID
+use java.util.Map
+
+use ::BBjGridExWidget/GxCellEditors.bbj::GxCellEditorSelect
+use ::BBjGridExWidget/GxCellEditors.bbj::GxCellEditorSuggestion
+
+use ::LookupResolver.bbj::LookupResolver
 
 class public BCLookupHelper 
 
@@ -23,40 +21,54 @@ class public BCLookupHelper
         #bc! = bc!
     methodend
 
-    rem search for primary key
-    rem look for a desc field and use that
-
-    rem if we find a _search/or a %search in the attr
-    rem we use the custom filter thing and we also need
-    rem to create a virtual column with primary key - desc 
-    rem and ask hyyan if we can have a onKeypressed and stuff to implement
-    rem a search like in the timesheets
-    method public GxCellEditorSuggestion buildSuggestions(BBjString table!)
+    method public GxCellEditorSuggestion buildSuggestions()
         declare GxCellEditorSuggestion suggestionEditor!
+        declare BBjNumber buildSuggestion!
+        declare BBjString resolverKey!
+        declare BBjString resolverLabel!
+        declare DataRow columnDefinitions!
 
+        buildSuggestion! = 0
+        resolverLabel! = "DESC"
         columnDefinitions! = #bc!.getAttributesRecord()
-            
+
         for i = 0 to columnDefinitions!.getColumnCount() -1
-            name! = columnDefinitions!.getColumnName(i) 
-            field! = columnDefinitions!.getField(name!)
+            declare auto BBjString label!
+            declare Map attr!        
+            declare BBjString cname!
+            declare DataField field!
+
+            cname! = columnDefinitions!.getColumnName(i) 
+            field! = columnDefinitions!.getField(cname!)
             attr! = field!.getAttributes()
 
-            if(num(attr!.get("EDITABLE")) = 2 ) then 
-                primaryKeyField! = name!
-                break
-            endif
+            if(cname! = "%SEARCH") then buildSuggestion! = 1
+            
+            rem if label is set in the attr it means that this column is the label for the lookup
+            label! = attr!.get("LABEL")
+            if(label! <> null()) then resolverLabel! = cname!
+
+            editable! = attr!.get("EDITABLE")
+            if (editable! = null()) then editable! = "0"
+
+            if(num(editable!) <> 2 ) then continue 
+            resolverKey! = cname!
         next i
 
-        uniqueID! = UUID.randomUUID().toString()
-        if (attr!.get("%SEARCH") = null()) then 
-            suggestionEditor! = new GxCellEditorSuggestion(uniqueID!, new SQLResolver(#bc!,table!,primaryKeyField!))
-        else
-            suggestionEditor! = new GxCellEditorSuggestion(uniqueID!, new LuceneResolver())
+        if(resolverKey! = null()) then 
+            throw "No Primary key found in " + #bc!.toString(), 404
         endif
 
-        suggestionEditor!.setEmptyMessage("No match found")
-        suggestionEditor!.setShowOnFocus(1)
-
-        methodret suggestionEditor!
+        if (buildSuggestion!) then 
+            uniqueID! = UUID.randomUUID().toString()
+            suggestionEditor! = new GxCellEditorSuggestion(uniqueID!, new LookupResolver(#bc!,resolverKey!,resolverLabel!))
+            suggestionEditor!.setEmptyMessage("No match found")
+            suggestionEditor!.setShowOnFocus(1)
+            suggestionEditor!.setMinLength(1)
+            suggestionEditor!.setRequired(1)
+            methodret suggestionEditor!
+        endif
+        rem TODO create alternativ/default ?
+        methodret null()
     methodend
 classend
