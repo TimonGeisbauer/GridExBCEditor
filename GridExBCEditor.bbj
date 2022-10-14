@@ -20,11 +20,11 @@ use ::BBjGridExWidget/GxOptions.bbj::GxOptions
 use ::BBjGridExWidget/GxColumns.bbj::GxColumn
 use ::BBjGridExWidget/GxCellEditors.bbj::GxCellEditorSelect
 
+use ::Util.bbj::Util
 use ::../../../../../GIT/SA/GridExBCEditor/Util.bbj::Util
-use::Util.bbj::Util
 
-use ::../../../../../GIT/SA/GridExBCEditor/BCLookupHelper.bbj::BCLookupHelper
 use ::BCLookupHelper.bbj::BCLookupHelper
+use ::../../../../../GIT/SA/GridExBCEditor/BCLookupHelper.bbj::BCLookupHelper
 
 class public GridExBCEditor 
     field private BusinessComponent bc!
@@ -295,17 +295,18 @@ class public GridExBCEditor
         if (data!.contains(#creationIndex!)) then
             data!.removeField(#creationIndex!)
             update! = 0
-        endif
-        rem we clone the rs with the data beacuse in case of an error we can set it again
-        backup! = #gridex!.getPinnedBottomRows().clone()
-        
-        rem we clear the creationRow
-        #creationRow!.clear()
+            
+            rem we clone the rs with the data beacuse in case of an error we can set it again
+            backup! = #gridex!.getPinnedBottomRows().clone()
+            
+            rem we clear the creationRow
+            #creationRow!.clear()
 
-        rem we add the cleared row so if no error happens the user can freely create the next one
-        pinnedRows! = new ResultSet()
-        pinnedRows!.add(#creationRow!)
-        #gridex!.setPinnedBottomRows(pinnedRows!)
+            rem we add the cleared row so if no error happens the user can freely create the next one
+            pinnedRows! = new ResultSet()
+            pinnedRows!.add(#creationRow!)
+            #gridex!.setPinnedBottomRows(pinnedRows!)
+        endif
 
         if(!update!) then #startCreationEdit()
         
@@ -368,9 +369,8 @@ class public GridExBCEditor
         dr!.setFieldValue(cname!,cell!.getValue())
         isCreation! = dr!.contains(#creationIndex!)
 
-
         rem we remove the nonEditableFields because in some BC's they cause issues
-        if (!isCreation!)#saveChanges(Util.removeFields(dr!,#nonEditableFields!))
+        if (!isCreation!)#saveChanges(Util.removeFields(dr!.clone(),#nonEditableFields!))
         rem we need to clone here because we remove the __index__ field bevor writing which would cause
         rem the next check for isCreation to fail
         if (isCreation! and cname! = #lastEditableField!) #saveChanges(Util.removeFields(dr!.clone(),#nonEditableFields!))

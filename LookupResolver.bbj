@@ -17,14 +17,19 @@ class public LookupResolver extends GxCellEditorSuggestionResolver
         #useSearch! = useSearch!
     methodend
 
+    rem /**
+    rem  * Gets called by the Grids GxCellEditorSuggestion 
+    rem  * Makes a retrieves to the LookupBC and calls the #addItem()
+    rem  * if the label can be found the result is build like
+    rem  * primaryKey - label
+    rem  * if not only the primaryKey is used
+    rem  * If useSearch is false all Data will be shown and there is not a search feature
+    rem  * The value when selected will always be the primaryKey
+    rem  */
     method public void doResolve(BBjString term!)
         declare DataRow filter!
         declare BBjNumber hasLabel!    
-        rem we gonna remove this all and set %SEARCH into the filter and let the bc handle it.
-        rem we need to check for %search in the fields from the bc
-        rem if we dont see the %search we need some default alternation
-        rem for the desc thing we should add a label attribute to dynamicly
-
+        
         filter! = new DataRow()
         hasLabel! = 0
         
